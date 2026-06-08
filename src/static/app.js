@@ -14,26 +14,82 @@ document.addEventListener("DOMContentLoaded", () => {
       activitiesList.innerHTML = "";
 
       // Populate activities list
+      // Helper to compute initials for avatar badges
+      function getInitials(email) {
+        return email
+          .split("@")[0]
+          .split(/[._-]/)
+          .map((s) => s[0] && s[0].toUpperCase())
+          .filter(Boolean)
+          .join("")
+          .slice(0, 2);
+      }
+
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
 
         const spotsLeft = details.max_participants - details.participants.length;
+      const participantItems = details.participants.length
+        ? details.participants
+            .map(
+              (participant) =>
+                `<li class="participant-item"><span class="avatar">${getInitials(
+                  participant
+                )}</span><span class="participant-email">${participant}</span><button class="delete-btn" data-email="${participant}" data-activity="${name}" title="Remove participant">×</button></li>`
+            )
+            .join("")
+        : `<li class="participant-item empty">No participants signed up yet</li>`;
 
-        activityCard.innerHTML = `
+      activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants-section">
+            <p><strong>Participants:</strong></p>
+            <ul class="participants-list">
+              ${participantItems}
+            </ul>
+          </div>
         `;
-
-        activitiesList.appendChild(activityCard);
 
         // Add option to select dropdown
         const option = document.createElement("option");
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
+        activitiesList.appendChild(activityCard);
+
+        // Attach delete handlers for participants in this card
+        activityCard.querySelectorAll('.delete-btn').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const email = btn.dataset.email;
+            const activity = btn.dataset.activity;
+
+            if (!confirm(`Remove ${email} from ${activity}?`)) return;
+
+            try {
+              const res = await fetch(
+                `/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`,
+                { method: 'DELETE' }
+              );
+
+              const result = await res.json();
+              if (res.ok) {
+                // Refresh the list to reflect change
+                fetchActivities();
+              } else {
+                messageDiv.textContent = result.detail || 'Failed to remove participant';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+              }
+            } catch (err) {
+              console.error('Error removing participant:', err);
+            }
+          });
+        });
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
